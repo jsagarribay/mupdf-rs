@@ -166,44 +166,49 @@ fn build_libmupdf() {
             let out = String::from_utf8_lossy(&d.stdout);
             eprintln!("Upgrade error:\nSTDERR:{}\nSTDOUT:{}", err, out);
         }
-        let d = cc::windows_registry::find(target.as_str(), "devenv.exe")
-            .unwrap()
-            .args(&[
-                "platform\\win32\\mupdf.sln",
-                "/build",
-                &format!("{}|{}", profile, msvc_platform),
-                "/project",
-                "libmupdf",
-            ])
-            .current_dir(&build_dir)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output()
-            .expect("failed to run devenv. Do you have it installed?");
-        if !d.status.success() {
-            let err = String::from_utf8_lossy(&d.stderr);
-            let out = String::from_utf8_lossy(&d.stdout);
-            panic!("Build error:\nSTDERR:{}\nSTDOUT:{}", err, out);
-        }
-        if msvc_platform == "x64" {
-            println!(
-                "cargo:rustc-link-search=native={}/platform/win32/{}/{}",
-                build_dir.display(),
-                msvc_platform,
-                profile
-            );
-        } else {
-            println!(
-                "cargo:rustc-link-search=native={}/platform/win32/{}",
-                build_dir.display(),
-                profile
-            );
-        }
-        println!("cargo:rustc-link-lib=dylib=libmupdf");
-        println!("cargo:rustc-link-lib=dylib=libthirdparty");
-    } else {
-        eprintln!("failed to find devenv. Do you have it installed?");
     }
+    let search = Command::new("where")
+        .args(&["msbuild.exe"])
+        .output()
+        .expect("Failed to run where: Could not search for msbuild.exe on path.");
+    let mut msbuild = if search.status.success() {
+        Command::new("msbuild.exe")
+    } else {
+        cc::windows_registry::find(target.as_str(), "msbuild.exe")
+            .expect("Could not find msbuild.exe on the registry")
+    };
+    let d = msbuild
+        .args(&[
+            "platform\\win32\\mupdf.sln",
+            &format!("/p:Configuration={}", profile),
+            &format!("/p:Platform={}", msvc_platform),
+        ])
+        .current_dir(&build_dir)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output()
+        .expect("failed to run devenv. Do you have it installed?");
+    if !d.status.success() {
+        let err = String::from_utf8_lossy(&d.stderr);
+        let out = String::from_utf8_lossy(&d.stdout);
+        panic!("Build error:\nSTDERR:{}\nSTDOUT:{}", err, out);
+    }
+    if msvc_platform == "x64" {
+        println!(
+            "cargo:rustc-link-search=native={}/platform/win32/{}/{}",
+            build_dir.display(),
+            msvc_platform,
+            profile
+        );
+    } else {
+        println!(
+            "cargo:rustc-link-search=native={}/platform/win32/{}",
+            build_dir.display(),
+            profile
+        );
+    }
+    println!("cargo:rustc-link-lib=dylib=libmupdf");
+    println!("cargo:rustc-link-lib=dylib=libthirdparty");
 }
 
 fn main() {
